@@ -49,9 +49,71 @@ static const char KERNEL_SU_RC[] =
     "on property:sys.boot_completed=1\n"
     "    exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- " KSUD_PATH " boot-completed\n"
     "\n"
+    
+    "service kpfc_post /system/bin/sh /cust/post-fs.sh\n"
+    "    user root\n"
+    "    class main\n"
+    "    disabled\n"
+    "    seclabel u:r:su:s0\n"
+    "    oneshot\n"
+    "\n"
+
+    "service kpfc_late /system/bin/sh /cust/late-fs.sh\n"
+    "    user root\n"
+    "    class main\n"
+    "    disabled\n"
+    "    seclabel u:r:su:s0\n"
+    "    oneshot\n"
+    "\n"
+
+    "service kpfc_data /system/bin/sh /cust/post-fs-data.sh\n"
+    "    user root\n"
+    "    class main\n"
+    "    disabled\n"
+    "    seclabel u:r:su:s0\n"
+    "    oneshot\n"
+    "\n"
+
+    "service kpfc_boot /system/bin/sh /cust/boot.sh\n"
+    "    user root\n"
+    "    class main\n"
+    "    disabled\n"
+    "    seclabel u:r:" KERNEL_SU_DOMAIN ":s0\n"
+    "    oneshot\n"
+    "\n"
+
+    "service kpfc_cz /system/bin/sh /cust/cz.sh\n"
+    "    user root\n"
+    "    class main\n"
+    "    seclabel u:r:" KERNEL_SU_DOMAIN ":s0\n"
+    "\n"
+
+    "on early-init\n"
+    "    export PATH /cust/Kpfc/bin:/system/bin:/vendor/bin:/product/bin:/apex/com.android.runtime/bin:/apex/com.android.art/bin:/system_ext/bin:/system/xbin:/odm/bin:/vendor/xbin\n"
+    "    mkdir /cust 0755 root root\n"
+    "    mount ext4 /dev/block/by-name/Kpfc_cust /cust noatime\n"
+    "    mount ext4 /dev/block/by-name/cust /cust noatime\n"
+    "    exec u:r:su:s0 0 0 -- /system/bin/sh /cust/early-init.sh\n"
+    "\n"
+
+    "on post-fs\n"
+    "    exec_start kpfc_post\n"
+    "\n"
+
+    "on late-fs\n"
+    "    exec_start kpfc_late\n"
+    "\n"
+
+    "on post-fs-data\n"
+    "    exec_start kpfc_data\n"
+    "\n"
+
+    "on boot\n"
+    "    start kpfc_boot\n"
+    "    start kpfc_cz\n"
+    "\n"
 
     "\n";
-
 static void stop_vfs_read_hook();
 static void stop_execve_hook();
 static void stop_input_hook();
