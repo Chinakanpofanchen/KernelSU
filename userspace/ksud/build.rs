@@ -1,7 +1,4 @@
 use std::env;
-use std::fs::File;
-use std::io::Write;
-use std::path::Path;
 use std::process::Command;
 
 fn get_git_version() -> Result<(u32, String), std::io::Error> {
@@ -28,6 +25,32 @@ fn get_git_version() -> Result<(u32, String), std::io::Error> {
     Ok((version_code, version_name))
 }
 
+fn configure_bindgen() {
+    // The bindgen::Builder is the main entry point
+    // to bindgen, and lets you build up options for
+    // the resulting bindings.
+    let bindings = bindgen::Builder::default()
+        // The input header we would like to generate
+        // bindings for.
+        .header("src/ksu_uapi.h")
+        .clang_args(["-x", "c++", "-I../../"])
+        // Tell cargo to invalidate the built crate whenever any of the
+        // included header files changed.
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+        // Finish the builder and generate the bindings.
+        .generate()
+        // Unwrap the Result and panic on failure.
+        .expect("Unable to generate bindings");
+
+    // Write the bindings to the $OUT_DIR/bindings.rs file.
+    let out_path = std::path::PathBuf::from(env::var("OUT_DIR").unwrap());
+    // for debug, uncomment below
+    // let out_path = std::path::PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    bindings
+        .write_to_file(out_path.join("bindings.rs"))
+        .expect("Couldn't write bindings!");
+}
+
 fn main() {
     let (code, name) = match get_git_version() {
         Ok((code, name)) => (code, name),
@@ -37,15 +60,14 @@ fn main() {
             (0, "0.0.0".to_string())
         }
     };
-    let out_dir = env::var("OUT_DIR").expect("Failed to get $OUT_DIR");
-    let out_dir = Path::new(&out_dir);
-    File::create(Path::new(out_dir).join("VERSION_CODE"))
-        .expect("Failed to create VERSION_CODE")
-        .write_all(code.to_string().as_bytes())
-        .expect("Failed to write VERSION_CODE");
+    if env::var("KSU_PACKAGE_NAME").is_err() {
+        println!("cargo:rustc-env=KSU_PACKAGE_NAME=me.weishu.kernelsu");
+    }
+    println!("cargo:rustc-env=VERSION_CODE={code}");
+    println!("cargo:rustc-env=VERSION_NAME={name}");
 
-    File::create(Path::new(out_dir).join("VERSION_NAME"))
-        .expect("Failed to create VERSION_NAME")
-        .write_all(name.trim().as_bytes())
-        .expect("Failed to write VERSION_NAME");
+    let target_os = env::var("CARGO_CFG_TARGET_OS").expect("CARGO_CFG_TARGET_OS not set");
+    if target_os == "android" {
+        configure_bindgen();
+    }
 }

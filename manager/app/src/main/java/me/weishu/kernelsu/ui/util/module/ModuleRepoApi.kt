@@ -49,7 +49,7 @@ fun fetchReleaseDescriptionHtml(moduleId: String, latestTag: String): String? {
     return runCatching {
         ksuApp.okhttpClient.newCall(Request.Builder().url(url).build()).execute().use { resp ->
             if (!resp.isSuccessful) null else {
-                val body = resp.body?.string() ?: return@use null
+                val body = resp.body.string()
                 val obj = JSONObject(body)
                 val releasesArray = obj.optJSONArray("releases") ?: return@use null
                 var fallbackHtml: String? = null
@@ -77,7 +77,7 @@ fun fetchModuleDetail(moduleId: String): ModuleDetail? {
     return runCatching {
         ksuApp.okhttpClient.newCall(Request.Builder().url(url).build()).execute().use { resp ->
             if (!resp.isSuccessful) return@use null
-            val body = resp.body?.string() ?: return@use null
+            val body = resp.body.string()
             val obj = JSONObject(body)
             val readme = obj.optString("readme", "")
             val readmeHtml = obj.optString("readmeHTML", "")
@@ -116,11 +116,7 @@ fun fetchModuleDetail(moduleId: String): ModuleDetail? {
                         var adl = a.optString("downloadUrl", "")
                         adl = stripTicks(adl)
                         val asz = a.optLong("size", 0L)
-                        val dcnt = when (val dcAny = a.opt("downloadCount")) {
-                            is Number -> dcAny.toInt()
-                            is String -> dcAny.toIntOrNull() ?: 0
-                            else -> 0
-                        }
+                        val dcnt = a.optInt("downloadCount", 0)
                         if (aname.isEmpty() || adl.isEmpty()) null else ReleaseAssetInfo(aname, adl, asz, dcnt)
                     }
                     ReleaseInfo(

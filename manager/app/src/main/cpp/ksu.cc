@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <climits>
 #include <sys/syscall.h>
+#include <cerrno>
 #include "ksu.h"
 
 static int fd = -1;
@@ -78,9 +79,21 @@ static struct ksu_get_info_cmd g_version {};
 
 struct ksu_get_info_cmd get_info() {
     if (!g_version.version) {
-        ksuctl(KSU_IOCTL_GET_INFO, &g_version);
+        if (ksuctl(KSU_IOCTL_GET_INFO, &g_version) < 0) {
+            ksuctl(KSU_IOCTL_GET_INFO_LEGACY, &g_version);
+            g_version.uapi_version = 0;
+        }
     }
     return g_version;
+}
+
+uint32_t get_kernel_uapi_version() {
+    auto info = get_info();
+    return info.uapi_version;
+}
+
+uint32_t get_manager_uapi_version() {
+    return KERNEL_SU_UAPI_VERSION;
 }
 
 uint32_t get_version() {
@@ -88,8 +101,8 @@ uint32_t get_version() {
     return info.version;
 }
 
-bool get_allow_list(struct ksu_get_allow_list_cmd *cmd) {
-    return ksuctl(KSU_IOCTL_GET_ALLOW_LIST, cmd) == 0;
+bool get_allow_list(struct ksu_new_get_allow_list_cmd *cmd) {
+    return ksuctl(KSU_IOCTL_NEW_GET_ALLOW_LIST, cmd) == 0;
 }
 
 bool is_safe_mode() {
@@ -101,17 +114,33 @@ bool is_safe_mode() {
 bool is_lkm_mode() {
     auto info = get_info();
     if (info.version > 0) {
-        return (info.flags & 0x1) != 0;
+        return (info.flags & KSU_GET_INFO_FLAG_LKM) != 0;
     }
-    return (legacy_get_info().second & 0x1) != 0;
+    return (legacy_get_info().second & KSU_GET_INFO_FLAG_LKM) != 0;
+}
+
+bool is_late_load_mode() {
+    auto info = get_info();
+    if (info.version > 0) {
+        return (info.flags & KSU_GET_INFO_FLAG_LATE_LOAD) != 0;
+    }
+    return false;
 }
 
 bool is_manager() {
     auto info = get_info();
     if (info.version > 0) {
-        return (info.flags & 0x2) != 0;
+        return (info.flags & KSU_GET_INFO_FLAG_MANAGER) != 0;
     }
     return legacy_get_info().first > 0;
+}
+
+bool is_pr_build() {
+    auto info = get_info();
+    if (info.version > 0) {
+        return (info.flags & KSU_GET_INFO_FLAG_PR_BUILD) != 0;
+    }
+    return false;
 }
 
 bool uid_should_umount(int uid) {
@@ -187,14 +216,17 @@ bool is_kernel_umount_enabled() {
     return value != 0;
 }
 
-bool set_enhanced_security_enabled(bool enabled) {
-    return set_feature(KSU_FEATURE_ENHANCED_SECURITY, enabled ? 1 : 0);
+int set_selinux_hide_enabled(bool enabled) {
+    if (!set_feature(KSU_FEATURE_SELINUX_HIDE, enabled ? 1 : 0)) {
+        return -errno;
+    }
+    return 0;
 }
 
-bool is_enhanced_security_enabled() {
+bool is_selinux_hide_enabled() {
     uint64_t value = 0;
     bool supported = false;
-    if (!get_feature(KSU_FEATURE_ENHANCED_SECURITY, &value, &supported)) {
+    if (!get_feature(KSU_FEATURE_SELINUX_HIDE, &value, &supported)) {
         return false;
     }
     if (!supported) {
